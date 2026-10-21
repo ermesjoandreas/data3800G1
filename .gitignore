@@ -1,0 +1,22 @@
+# Data: ESS data must not be redistributed, and the file is too large for git.
+# Download it yourself (see README) and put it in data/raw/.
+data/raw/*
+data/processed/*
+!data/raw/.gitkeep
+!data/processed/.gitkeep
+*.zip
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.pyc
+
+# Jupyter
+.ipynb_checkpoints/
+
+# OS / editors
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
