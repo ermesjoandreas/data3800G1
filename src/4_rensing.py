@@ -5,10 +5,10 @@
 # Hva skriptet gjør, kort:
 # 1. Leser inn variablene vi trenger
 # 2. Fjerner personer som ikke svarte på helsespørsmålet
-# 3. Setter 0 gram for de som aldri drikker
+# 3. Setter 0 gram og "aldri fyll" for de som aldri drikker
 # 4. Gjør koder som 77, 999 og 6666 om til manglende verdier (NaN)
 # 5. Fjerner personer som mangler svar vi trenger
-# 6. Lager lesbare kategorier (alkohol, alder, kjønn, legebesøk)
+# 6. Lager lesbare kategorier (alkohol, fyll, alder, kjønn, region, legebesøk)
 # 7. Lagrer resultatet i data/processed/ess_renset.csv
 
 import numpy as np
@@ -45,13 +45,15 @@ svarte = (df["dshltref"] == 0) & (df["dshltdk"] == 0) & (df["dshltna"] == 0)
 df = df[svarte].copy()
 tell(df, "2. Svarte på helsespørsmålet")
 
-# --- 3. 0 gram for de som aldri drikker ---
-# Personer som svarte "aldri" (alcfreq = 7) fikk ikke spørsmålet om gram
-# og har koden 6666 ("ikke aktuelt"). Vi vet likevel svaret: 0 gram.
-# Dette må skje FØR vi gjør resten av 6666 om til NaN (steg 4).
+# --- 3. Fyll inn svar vi vet for de som aldri drikker ---
+# Personer som svarte "aldri" (alcfreq = 7) fikk ikke spørsmålene om gram
+# og fyll, og har koden "ikke aktuelt" (6666 for gram, 6 for fyll).
+# Vi vet likevel svaret: 0 gram, og fyll = 5 ("aldri").
+# Dette må skje FØR vi gjør resten av kodene om til NaN (steg 4).
 aldri = df["alcfreq"] == 7
 for kol in ["alcwkdy", "alcwknd"]:
     df.loc[aldri & (df[kol] == 6666), kol] = 0
+df.loc[aldri & (df["alcbnge"] == 6), "alcbnge"] = 5
 
 # --- 4. Koder -> NaN ---
 # Tallene under er ikke ekte svar, men koder for nektet / vet ikke / ikke svar.
@@ -102,7 +104,35 @@ def aldersgruppe(alder):
         return "65+"
 
 
+def fyll_kategori(b):
+    # alcbnge: 1 = daglig, 2 = ukentlig, 3 = månedlig, 4 = sjeldnere, 5 = aldri
+    if pd.isna(b):
+        return np.nan
+    elif b <= 2:
+        return "1 ukentlig+"
+    elif b <= 4:
+        return "2 av og til"
+    else:
+        return "3 aldri"
+
+
+# Regioner etter drikkekultur (oblig 1: Sør-Europa mot Nord-Europa).
+# Dette er et valg gruppa har tatt, og det må stå i rapporten.
+# Israel (IL) er ikke i Europa og holdes utenfor regionsammenligningen.
+REGIONER = {
+    "Norden": ["NO", "SE", "FI", "IS"],
+    "Vest":   ["AT", "BE", "CH", "DE", "FR", "NL", "GB", "IE"],
+    "Sør":    ["ES", "IT", "PT", "GR", "CY"],
+    "Øst":    ["BG", "EE", "HU", "LT", "LV", "PL", "SK", "UA",
+               "HR", "SI", "ME", "RS"],
+}
+land_til_region = {land: region
+                   for region, liste in REGIONER.items()
+                   for land in liste}
+
 df["alkohol_kat"] = df["alcfreq"].apply(alkohol_kategori)
+df["fyll_kat"] = df["alcbnge"].apply(fyll_kategori)
+df["region"] = df["cntry"].map(land_til_region).fillna("Utenfor Europa")
 df["aldersgruppe"] = df["agea"].apply(aldersgruppe)
 df["kjonn"] = df["gndr"].map({1: "mann", 2: "kvinne"})
 
@@ -121,7 +151,7 @@ df = df.drop(columns=["dshltref", "dshltdk", "dshltna"])
 print()
 print(df.describe().round(1))
 print()
-for kol in ["alkohol_kat", "aldersgruppe", "kjonn"]:
+for kol in ["alkohol_kat", "fyll_kat", "aldersgruppe", "kjonn", "region"]:
     print(df[kol].value_counts().sort_index())
     print()
 
