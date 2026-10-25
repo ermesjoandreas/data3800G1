@@ -9,7 +9,11 @@
 # 3. Finner hvor mange som har vært hos lege totalt: P(lege)
 # 4. Finner andelen per alkoholgruppe: P(lege | alkoholgruppe)
 # 5. Deler opp på alder og kjønn for å se om forskjellen holder seg
-# 6. Lagrer tabellene som CSV i figures/
+# 6. Ser på fyll i stedet for hvor ofte man drikker
+# 7. Sammenligner drikkekultur mellom regioner (Norden, Vest, Sør, Øst)
+# 8. Ser om alkohol og legebesøk henger sammen likt i alle regioner
+# 9. Sjekker om vekting (anweight) endrer resultatet
+# 10. Lagrer tabellene som CSV i figures/
 
 import pandas as pd
 
@@ -79,9 +83,76 @@ print("Antall personer per celle (alkohol x alder):")
 print(antall)
 print()
 
-# --- 6. Lagre tabellene ---
+# --- 6. Fyll i stedet for frekvens ---
+# Oblig 1: er det fyll (mye på én gang) eller jevn drikking som henger
+# sammen med legebesøk? fyll_kat mangler for noen få, så de tas ut her.
+fyll = df.dropna(subset=["fyll_kat"])
+per_fyll = fyll.groupby("fyll_kat").agg(
+    personer=("fastlege", "size"),
+    andel_fastlege=("fastlege", "mean"),
+    median_alder=("agea", "median"),
+)
+print("Per fyllgruppe:")
+print(per_fyll.round(3))
+print()
+
+fyll_alder = fyll.pivot_table(
+    index="fyll_kat", columns="aldersgruppe",
+    values="fastlege", aggfunc="mean",
+)
+print("P(fastlege) per fyllgruppe og aldersgruppe:")
+print(fyll_alder.round(3))
+print()
+
+# --- 7. Drikkekultur per region ---
+# Oblig 1: drikker Sør-Europa jevnt og Nord-Europa i fyll?
+# Vi ser bare på Europa, så Israel ("Utenfor Europa") tas ut.
+europa = fyll[fyll["region"] != "Utenfor Europa"]
+
+# Andel i hver alkoholgruppe og fyllgruppe per region.
+# normalize="index" gjør at hver rad summerer til 1 (andeler, ikke antall).
+frekvens_region = pd.crosstab(europa["region"], europa["alkohol_kat"],
+                              normalize="index")
+fyll_region = pd.crosstab(europa["region"], europa["fyll_kat"],
+                          normalize="index")
+print("Hvor ofte man drikker, andel per region:")
+print(frekvens_region.round(3))
+print()
+print("Fyll, andel per region:")
+print(fyll_region.round(3))
+print()
+
+# --- 8. Legebesøk per region og alkoholgruppe ---
+# Er sammenhengen mellom alkohol og legebesøk den samme i alle regioner?
+region_tabell = europa.pivot_table(
+    index="alkohol_kat", columns="region",
+    values="fastlege", aggfunc="mean",
+)
+print("P(fastlege) per alkoholgruppe og region:")
+print(region_tabell.round(3))
+print()
+
+# --- 9. Kontroll med vekting ---
+# ESS anbefaler å vekte (anweight) når man sammenligner land,
+# fordi landene er ulikt store og utvalgene er trukket ulikt.
+# Et vektet snitt er sum(verdi * vekt) / sum(vekt).
+def vektet_andel(gruppe):
+    return (gruppe["fastlege"] * gruppe["anweight"]).sum() / gruppe["anweight"].sum()
+
+
+uvektet = europa.groupby("region")["fastlege"].mean()
+vektet = europa.groupby("region")[["fastlege", "anweight"]].apply(vektet_andel)
+print("P(fastlege) per region, uvektet og vektet:")
+print(pd.DataFrame({"uvektet": uvektet, "vektet": vektet}).round(3))
+print()
+
+# --- 10. Lagre tabellene ---
 # CSV kan åpnes i Excel av folk som ikke bruker Python (som i lab 41).
 per_alkohol.round(3).to_csv(UT + "per_alkohol.csv")
 alder_tabell.round(3).to_csv(UT + "alkohol_x_alder.csv")
 kjonn_tabell.round(3).to_csv(UT + "alkohol_x_kjonn.csv")
+per_fyll.round(3).to_csv(UT + "per_fyll.csv")
+fyll_region.round(3).to_csv(UT + "fyll_per_region.csv")
+frekvens_region.round(3).to_csv(UT + "frekvens_per_region.csv")
+region_tabell.round(3).to_csv(UT + "alkohol_x_region.csv")
 print("Tabeller lagret i", UT)
